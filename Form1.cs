@@ -1,24 +1,29 @@
-using System.Configuration;
+п»їusing System.Configuration;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Reflection;
 
 namespace FileExplorer
 {
     public partial class Form1 : Form
     {
+
         private string startDirectory;
         private string filePattern;
         private List<string> filesFound;
+        private int totalFilesFound;
         private TreeNodeCollection nodes;
         private Thread searchThread;
-        private ManualResetEvent pauseEvent = new ManualResetEvent(true); // Создаем ManualResetEvent и инициализируем его в сигнальном состоянии (true)
+
+        private ManualResetEvent pauseEvent = new ManualResetEvent(true); // РЎРѕР·РґР°РµРј ManualResetEvent Рё РёРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј РµРіРѕ РІ СЃРёРіРЅР°Р»СЊРЅРѕРј СЃРѕСЃС‚РѕСЏРЅРёРё (true)
         private Stopwatch stopwatch = new Stopwatch();
 
         public Form1()
         {
             InitializeComponent();
 
-            //  Заполняем текстовые поля сохраненными критериями
+            //  Р—Р°РїРѕР»РЅСЏРµРј С‚РµРєСЃС‚РѕРІС‹Рµ РїРѕР»СЏ СЃРѕС…СЂР°РЅРµРЅРЅС‹РјРё РєСЂРёС‚РµСЂРёСЏРјРё
             startDirectoryTextBox.Text = GetSetting("startDirectory");
             filePatternTextBox.Text = GetSetting("filePattern");
 
@@ -29,13 +34,25 @@ namespace FileExplorer
 
         private void startButton_Click(object sender, EventArgs e)
         {
+            if (!Directory.Exists(startDirectoryTextBox.Text))
+            {
+                MessageBox.Show("РЎС‚Р°СЂС‚РѕРІР°СЏ РґРёСЂРµРєС‚РѕСЂРёСЏ РЅРµ СЃСѓС‰РµСЃС‚РІСѓРµС‚.", "РћС€РёР±РєР°", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (!IsValidRegex(filePatternTextBox.Text))
+            {
+                MessageBox.Show($"РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ СЂРµРіСѓР»СЏСЂРЅРѕРµ РІС‹СЂР°Р¶РµРЅРёРµ", "РћС€РёР±РєР°", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
             statusLabel.Visible = true;
             startDirectoryTextBox.Enabled = false;
             filePatternTextBox.Enabled = false;
-            if (searchThread != null) // Если поток уже существует, т.е. был остановлен по кнопке Стоп
+            if (searchThread != null) // Р•СЃР»Рё РїРѕС‚РѕРє СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚, С‚.Рµ. Р±С‹Р» РѕСЃС‚Р°РЅРѕРІР»РµРЅ РїРѕ РєРЅРѕРїРєРµ РЎС‚РѕРї
             {
-                stopwatch.Start(); // Начинем отсчет времени
-                pauseEvent.Set(); // Снимаем блокировку с потока
+                stopwatch.Start(); // РќР°С‡РёРЅРµРј РѕС‚СЃС‡РµС‚ РІСЂРµРјРµРЅРё
+                pauseEvent.Set(); // РЎРЅРёРјР°РµРј Р±Р»РѕРєРёСЂРѕРІРєСѓ СЃ РїРѕС‚РѕРєР°
                 UpdateUI(false);
             }
             else
@@ -51,15 +68,15 @@ namespace FileExplorer
 
                 filesFound = new List<string>();
                 searchThread = new Thread(new ThreadStart(SearchFiles));
-                searchThread.Start(); // Начинаем отсчет времени
+                searchThread.Start(); // РќР°С‡РёРЅР°РµРј РѕС‚СЃС‡РµС‚ РІСЂРµРјРµРЅРё
                 UpdateUI(false);
             }
         }
 
         private void stopButton_Click(object sender, EventArgs e)
         {
-            stopwatch.Stop(); // Останавливаем отсчет времени
-            pauseEvent.Reset(); // Блокируем поток
+            stopwatch.Stop(); // РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј РѕС‚СЃС‡РµС‚ РІСЂРµРјРµРЅРё
+            pauseEvent.Reset(); // Р‘Р»РѕРєРёСЂСѓРµРј РїРѕС‚РѕРє
             UpdateUI(true);
         }
 
@@ -71,11 +88,11 @@ namespace FileExplorer
 
                 stopwatch.Stop();
 
-                UpdateStatus($"Поиск закончен. Нашлось {filesFound.Count} файлов за {stopwatch.Elapsed.TotalSeconds:F2} секунд");
+                //UpdateStatus($"РќР°С€Р»РѕСЃСЊ {filesFound.Count} С„Р°Р№Р»РѕРІ РёР· {totalFilesFound} Р·Р° {stopwatch.Elapsed.TotalSeconds:F2} СЃРµРєСѓРЅРґ");
             }
             catch (Exception ex)
             {
-                UpdateStatus($"Ошибка: {ex.Message}");
+                UpdateStatus($"РћС€РёР±РєР°: {ex.Message}");
             }
             finally
             {
@@ -93,21 +110,22 @@ namespace FileExplorer
 
         private void SearchDirectory(string directory)
         {
-            UpdateStatus($"Поиск в: {directory}");
+            UpdateStatus($"РќР°С€Р»РѕСЃСЊ {filesFound.Count} С„Р°Р№Р»РѕРІ РёР· {totalFilesFound} Р·Р° {stopwatch.Elapsed.TotalSeconds:F2} СЃРµРєСѓРЅРґ\r\n" +
+                $"РџРѕРёСЃРє РІ: {directory}");
             try
-            {                
-                foreach (string file in Directory.GetFiles(directory)) // Обход всех директорий в исходной
+            {
+                foreach (string file in Directory.GetFiles(directory)) // РћР±С…РѕРґ РІСЃРµС… РґРёСЂРµРєС‚РѕСЂРёР№ РІ РёСЃС…РѕРґРЅРѕР№
                 {
-                    pauseEvent.WaitOne(); // Ждем разблокировки потока
-
-                    if (Regex.IsMatch(Path.GetFileName(file), filePattern)) // Если файл соответствует маске
+                    pauseEvent.WaitOne(); // Р–РґРµРј СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё РїРѕС‚РѕРєР°
+                    totalFilesFound++;
+                    if (Regex.IsMatch(Path.GetFileName(file), filePattern)) // Р•СЃР»Рё С„Р°Р№Р» СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ РјР°СЃРєРµ
                     {
-                        filesFound.Add(file); // Добавляем файл в список
-                        AddFileToTreeView(file); // Добавляем файл в дерево
+                        filesFound.Add(file); // Р”РѕР±Р°РІР»СЏРµРј С„Р°Р№Р» РІ СЃРїРёСЃРѕРє
+                        AddFileToTreeView(file); // Р”РѕР±Р°РІР»СЏРµРј С„Р°Р№Р» РІ РґРµСЂРµРІРѕ 
                     }
                 }
 
-                foreach (string subDir in Directory.GetDirectories(directory)) // То же самое, но для дочерних директорий исходной
+                foreach (string subDir in Directory.GetDirectories(directory)) // РўРѕ Р¶Рµ СЃР°РјРѕРµ, РЅРѕ РґР»СЏ РґРѕС‡РµСЂРЅРёС… РґРёСЂРµРєС‚РѕСЂРёР№ РёСЃС…РѕРґРЅРѕР№
                 {
                     SearchDirectory(subDir);
                 }
@@ -117,13 +135,14 @@ namespace FileExplorer
             }
         }
 
-        private void AddFileToTreeView(string filePath) // Построение дерева
+        private void AddFileToTreeView(string filePath) // РџРѕСЃС‚СЂРѕРµРЅРёРµ РґРµСЂРµРІР°
         {
             if (InvokeRequired)
             {
                 Invoke(new Action<string>(AddFileToTreeView), filePath);
                 return;
             }
+            filesTreeView.BeginUpdate();
             string[] pathParts = filePath.Split('\\');
             nodes = filesTreeView.Nodes;
             TreeNode lastNode = null;
@@ -132,9 +151,10 @@ namespace FileExplorer
                 lastNode = nodes[part] ?? nodes.Add(part, part);
                 nodes = lastNode.Nodes;
             }
+            filesTreeView.EndUpdate();
         }
 
-        private void UpdateStatus(string status) // ОБновление информации о ходе поиска
+        private void UpdateStatus(string status) // РћР‘РЅРѕРІР»РµРЅРёРµ РёРЅС„РѕСЂРјР°С†РёРё Рѕ С…РѕРґРµ РїРѕРёСЃРєР°
         {
             if (InvokeRequired)
             {
@@ -142,10 +162,10 @@ namespace FileExplorer
                 return;
             }
 
-            statusLabel.Text = status;            
+            statusLabel.Text = status;
         }
 
-        private void UpdateUI(bool flag) // Изменение видимости кнопок по ходу поиска
+        private void UpdateUI(bool flag) // РР·РјРµРЅРµРЅРёРµ РІРёРґРёРјРѕСЃС‚Рё РєРЅРѕРїРѕРє РїРѕ С…РѕРґСѓ РїРѕРёСЃРєР°
         {
             if (InvokeRequired)
             {
@@ -157,18 +177,34 @@ namespace FileExplorer
             stopButton.Enabled = !flag;
         }
 
-        private static string GetSetting(string key) // Получение сохраненных пользовательских критериев
+        private static string GetSetting(string key) // РџРѕР»СѓС‡РµРЅРёРµ СЃРѕС…СЂР°РЅРµРЅРЅС‹С… РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёС… РєСЂРёС‚РµСЂРёРµРІ
         {
             return ConfigurationManager.AppSettings[key];
         }
 
-        private static void SetSetting(string key, string value) // Сохранение пользовательских критериев
+        private static void SetSetting(string key, string value) // РЎРѕС…СЂР°РЅРµРЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёС… РєСЂРёС‚РµСЂРёРµРІ
         {
             Configuration configuration = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
             configuration.AppSettings.Settings.Remove(key);
             configuration.AppSettings.Settings.Add(key, value);
             configuration.Save(ConfigurationSaveMode.Full, true);
             ConfigurationManager.RefreshSection("appSettings");
+        }
+
+        // РџСЂРѕРІРµСЂРєР° РІРІРµРґРµРЅРЅРѕРіРѕ СЂРµРіСѓР»СЏСЂРЅРѕРіРѕ РІС‹СЂР°Р¶РµРЅРёСЏ
+        private static bool IsValidRegex(string pattern)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                return false;
+            try
+            {
+                Regex.Match("", pattern);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            return true;
         }
     }
 }
