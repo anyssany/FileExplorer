@@ -85,10 +85,7 @@ namespace FileExplorer
             try
             {
                 SearchDirectory(startDirectory);
-
                 stopwatch.Stop();
-
-                //UpdateStatus($"Нашлось {filesFound.Count} файлов из {totalFilesFound} за {stopwatch.Elapsed.TotalSeconds:F2} секунд");
             }
             catch (Exception ex)
             {
